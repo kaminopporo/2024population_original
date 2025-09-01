@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2024在留外国人比率</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        /* HTMLとBody要素をビューポートいっぱいに広げる */
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #ffffff;
+        }
+        /* コンテナ（サイドバーと地図を横並びにする） */
+        .container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+            gap: 15px;
+            padding: 15px;
+            box-sizing: border-box;
+            align-items: stretch;
+            position: relative;
+        }
+        /* サイドバーのスタイル */
+        .sidebar {
+            width: 300px;
+            background-color: #fff2cc;
+            padding: 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+            border-radius: 15px;
+        }
+        /* スクロールバーのスタイル（WebKitブラウザ向け） */
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background: #FFFFFF00;
+            border-radius: 15px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 15px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* ドラッグハンドルのスタイル (非表示にする) */
+        .sidebar-resizer {
+            display: none;
+        }
+        /* 地図が表示されるdiv要素 */
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            width: auto;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        /* サイドバー内の各セクションのスタイル */
+        .sidebar h1 {
+            font-size: 2em;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 5px;
+            text-align: left;
+            color: #000000;
+            line-height: 1.3;
+            display: block;
+        }
+        /* Info button style - 地図の右上に配置 */
+        .info-button {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: none;
+            border: none;
+            border-radius: 0;
+            width: 30px;
+            height: 30px;
+            font-family: 'Material Icons';
+            font-size: 20px;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none;
+            transition: color 0.3s ease, transform 0.2s ease;
+            z-index: 600;
+        }
+        .info-button:hover {
+            color: #333;
+            transform: scale(1.02);
+        }
+        .legend {
+            margin-bottom: 30px;
+        }
+        .legend h2, .details h2 {
+            font-size: 1.4em;
+            font-weight: 500;
+            margin-top: 0;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+            color: #34495e;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            color: #4a4a4a;
+            padding: 5px 0;
+            transition: background-color 0.2s ease;
+            border-radius: 15px;
+        }
+        /* 選択された凡例項目のスタイル */
+        .legend-item.selected {
+            background-color: #e9e9e9;
+            font-weight: 600;
+            color: #000000;
+        }
+        /* アイコンのスタイル */
+        .legend-item .material-icons,
+        .legend-item .material-symbols-outlined {
+            font-size: 1.5em;
+            margin-right: 10px;
+            color: #666;
+        }
+        /* 塗り分けシンボルのスタイル */
+        .color-symbol {
+            width: 20px;
+            height: 20px;
+            border-radius: 15px;
+            margin-right: 10px;
+            flex-shrink: 0; /* シンボルが縮小するのを防ぐ */
+        }
+        .coloring-section .legend-item span {
+            font-size: 1.05em;
+            line-height: 1.4; /* テキストの折り返しを改善するために行の高さを調整 */
+            color: #444;
+        }
+        .details {
+            margin-top: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .details p {
+            font-size: 1.05em;
+            margin-bottom: 0px;
+            line-height: 1.2;
+            color: #4a4a4a;
+        }
+        /* 地図情報パネルのスタイル */
+        #info-panel {
+            background-color: #fdfdfd;
+            border-radius: 15px;
+            padding: 10px 15px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        #info-panel h2 {
+            font-size: 1.3em;
+            margin-top: 5px;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        #info-panel p {
+            font-size: 0.9em;
+            margin-bottom: 0px;
+            line-height: 1.1;
+            color: #666666;
+        }
+        /* 選択中の情報行をハイライト */
+        #info-panel p.highlight,
+        .leaflet-popup-content p.highlight {
+            color: #990000;
+        }
+        /* 新たに追加：情報行の太字部分 */
+        .info-label {
+            font-weight: 700;
+        }
+        /* 説明モーダル/パネルのスタイル */
+        .explanation-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .explanation-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .explanation-panel {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+        .explanation-overlay.active .explanation-panel {
+            transform: translateY(0);
+        }
+        .explanation-panel h2 {
+            font-size: 1.8em;
+            color: #000000;
+            margin-top: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        .explanation-panel p {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .explanation-panel ul {
+            list-style-type: disc;
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        .explanation-panel li {
+            font-size: 1.05em;
+            line-height: 1.6;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        /* 新しい凡例コンテナのスタイル */
+        .explanation-panel .legend-in-explanation {
+            margin-top: 25px;
+            margin-bottom: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .explanation-panel .legend-in-explanation h3 {
+            font-size: 1.2em; /* 統一 */
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #000000;
+            cursor: pointer;
+        }
+        .explanation-panel .legend-in-explanation .legend-item {
+            cursor: pointer;
+        }
+        /* 新しい塗り分けセクションのスタイル */
+        .explanation-panel .coloring-section {
+            margin-top: 25px;
+            margin-bottom: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .explanation-panel .coloring-section h3 {
+            font-size: 1.2em; /* 統一 */
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #000000;
+            cursor: pointer;
+        }
+        .coloring-section .legend-item {
+            display: flex;
+            align-items: center; /* アイテムを中央に揃える */
+            margin-bottom: 10px;
+            color: #4a4a4a;
+            padding: 5px 0;
+            transition: background-color 0.2s ease;
+            border-radius: 15px;
+            cursor: default;
+        }
+        .coloring-section .legend-item:hover {
+            background-color: transparent;
+        }
+        .explanation-panel .close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 2em;
+            color: #999;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .explanation-panel .close-button:hover {
+            color: #333;
+        }
+        /* 凡例内のテキストのスタイルを統一 */
+        .explanation-panel .legend-item span {
+            font-size: 1.05em;
+            line-height: 1.6;
+            color: #000000;
+        }
+        /* 新しく追加する区切り線 */
+        .explanation-panel .section-divider {
+            border-top: 1px solid #e0e0e0;
+            margin: 20px 0;
+        }
+        /* LeafletのSVG要素内にパターンを定義するためのCSSを追加 */
+        #map svg defs {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+        /* --- スマートフォン向けのスタイル (画面幅が768px以下の場合) --- */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 7.5px;
+                gap: 0;
+                height: 100%;
+                width: 100%;
+            }
+            .sidebar {
+                display: none;
+            }
+            #map {
+                flex-grow: 1;
+                height: 100%;
+                box-shadow: none;
+                overflow: hidden;
+            }
+            #info-panel {
+                display: none;
+            }
+            /* Info button on mobile */
+            .info-button {
+                top: 15px;
+                right: 15px;
+                width: 35px;
+                height: 35px;
+                font-size: 24px;
+                z-index: 600;
+            }
+            /* Leafletポップアップのスタイル調整 (変更箇所) */
+            .leaflet-popup-content-wrapper {
+                border-radius: 15px;
+                padding: 2px;
+                font-size: 13px;
+                line-height: 1.1;
+            }
+            .leaflet-popup-content h2 {
+                font-size: 1em;
+                margin-top: 0;
+                margin-bottom: 3px;
+                line-height: 1.1;
+                color: #000000;
+            }
+            .leaflet-popup-content p {
+                font-size: 0.8em;
+                margin-bottom: 1px;
+                line-height: 0.5;
+            }
+            /* 説明パネルのスマホ対応 */
+            .explanation-panel {
+                margin: auto;
+                align-self: center;
+                width: 75vw;
+                height: 75vh;
+                max-width: none;
+                max-height: none;
+                padding: 30px;
+                box-sizing: border-box;
+            }
+            .explanation-panel h2 {
+                font-size: 1.5em;
+            }
+            .explanation-panel p, .explanation-panel li {
+                font-size: 1em;
+            }
+        }
+        .legend-in-explanation h3,
+        .coloring-section h3 {
+            font-weight: 700;        /* 太字 */
+            cursor: default;         /* カーソルを「クリック不可」に */
+            pointer-events: none;    /* クリック自体を無効化 */
+        }
+        .legend-in-explanation {
+            margin-bottom: 10px;
+        }
+        .legend-title {
+            font-size: 1.2em;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #000000;
+        }
+        .legend-item-line {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 15px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+        /* 新しいグラデーション凡例のスタイル */
+        .legend-gradient-container {
+            display: flex;
+            align-items: center;
+            height: 250px;
+            gap: 10px; /* グラデーションバーと値の間にスペースを作成 */
+        }
+        .legend-gradient-bar {
+            width: 30px;
+            height: 100%;
+            border-radius: 15px;
+        }
+        /* 凡例の値を垂直に並べるためのコンテナ */
+        .legend-gradient-values {
+            position: relative;
+            height: 100%;
+            width: 50px; /* 値の表示用に幅を確保 */
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        /* 各値のスタイル */
+        .legend-value {
+            position: absolute;
+            left: 0; /* 左揃えに変更 */
+            transform: translateY(-50%); /* 中央に配置 */
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <svg width="0" height="0" style="position:absolute; top:0; left:0;">
+        <defs>
+            <pattern id="stripe-pattern" patternUnits="userSpaceOnUse" width="10" height="10">
+                <rect x="0" y="0" width="5" height="10" fill="#0000ff" />
+                <rect x="5" y="0" width="5" height="10" fill="#9900ff" />
+            </pattern>
+        </defs>
+    </svg>
+    <div class="container">
+        <button id="infoButton" class="info-button" aria-label="地図の説明を表示">
+            <span class="material-icons">info</span>
+        </button>
+        <div class="sidebar" id="sidebar">
+            <h1>
+                2024在留外国人比率
+            </h1>
+            <div class="details">
+                <h2>詳細情報</h2>
+                <div id="info-panel">地図をクリックするとここに情報が表示されます。</div>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <div id="explanationOverlay" class="explanation-overlay">
+        <div class="explanation-panel">
+            <button class="close-button" id="closeExplanationButton" aria-label="説明を閉じる">&times;</button>
+            <h2>地図の説明</h2>
+            <p>この地図は、2024年末における自治体別の在留外国人比率を示しています。各自治体は、在留外国人比率の高低によって塗り分けられます。</p>
+            <div class="section-divider"></div>
+            <h3>塗り分け</h3>
+            <div id="explanation-legend-list" class="legend-gradient-container"></div>
+            <div class="section-divider"></div>
+            <p><strong>クリックで詳細</strong>: 地図上の自治体をクリックすると、サイドバー（PC）またはポップアップ（スマートフォン）にその自治体の在留外国人比率の詳細が表示されます。</p>
+            <p><strong>在留外国人人口</strong>: 法務省が発表する「在留外国人統計（旧登録外国人統計）/在留外国人統計」（2024年12月31日現在のデータ）を用いています。なお、総務省発表のデータは住民基本台帳に基づいているため、在留外国人人口の実態を把握するのには不十分と判断し、在留外国人人口については法務省発表のデータを用いています。また、未定・不詳人口5,313人（全国外人計の0.14%）は配分していません。
+</p>
+            <p><strong>日本人人口</strong>: 総務省が発表する「住民基本台帳に基づく人口、人口動態及び世帯数調査/調査の結果」（2025年1月1日現在のデータ）を用いています。</p>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Leafletマップの初期化
+        var map = L.map('map', { zoomControl: false }).setView([38.0, 138.0], 5);
+        // ベースマップ（背景地図）の追加
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        // --- GeoJSONデータの読み込みと表示 ---
+        var geojsonDataPath = '2024外人.json';
+        var geojsonLayer;
+        // N03_007をキーとして、関連するレイヤーを保持するマップ
+        const n03GroupLayers = new Map();
+        let highlightedLayers = [];
+
+        // データのカラム名
+        const municipalityNameColumn = 'GIS2024外人_市区町村';
+        const ratioColumn = 'GIS2024外人_割合';
+        const foreignerPopulationColumn = 'GIS2024外人_12/31外人';
+        const totalPopulationColumn = 'GIS2024外人_合計';
+        // N03_007カラム名
+        const n03Column = 'N03_007';
+
+        // 塗り分け用の色を取得する関数
+        function getColor(score) {
+            if (score >= 30.00) return '#000000';
+            if (score >= 25.00) return '#5a2051';
+            if (score >= 20.00) return '#820a6c';
+            if (score >= 17.50) return '#b20d7b';
+            if (score >= 15.00) return '#980000';
+            if (score >= 12.50) return '#cc0000';
+            if (score >= 10.00) return '#dc0024';
+            if (score >= 9.00) return '#ff0e03';
+            if (score >= 8.00) return '#ff5c01';
+            if (score >= 7.00) return '#ff9d01';
+            if (score >= 6.00) return '#ffbb02';
+            if (score >= 5.00) return '#fee101';
+            if (score >= 4.50) return '#f1fc01';
+            if (score >= 4.00) return '#c5fe01';
+            if (score >= 3.50) return '#8bfe41';
+            if (score >= 3.00) return '#51fe93';
+            if (score >= 2.50) return '#12ffe5';
+            if (score >= 2.00) return '#42edff';
+            if (score >= 1.50) return '#a2d2ff';
+            if (score >= 1.00) return '#c6d5ff';
+            if (score >= 0.50) return '#e1e9ff';
+            if (score > 0.00)  return '#f1f5ff';
+            return 'transparent'; // データがない場合のデフォルトを透明に変更
+        }
+
+        // マップのスタイルを決定する関数
+        function style(feature) {
+            const ratioValue = parseFloat(feature.properties[ratioColumn]);
+            
+            return {
+                fillColor: getColor(ratioValue),
+                weight: 1,
+                opacity: 1,
+                color: 'white',
+                dashArray: '3',
+                fillOpacity: 0.8
+            };
+        }
+
+        const highlightStyle = {
+            weight: 3,
+            color: '#990000',
+            dashArray: '',
+        };
+        
+        // 全てのハイライトをリセットし、情報パネルをクリアする関数
+        function resetAllHighlightsAndPanel() {
+            if (highlightedLayers.length > 0) {
+                highlightedLayers.forEach(layer => {
+                    geojsonLayer.resetStyle(layer);
+                });
+                highlightedLayers = [];
+            }
+            document.getElementById('info-panel').innerHTML = '地図をクリックするとここに情報が表示されます。';
+        }
+
+        // フィーチャがクリックされた時の処理
+        function clickFeature(e) {
+            // 地図全体へのイベント伝播を停止
+            L.DomEvent.stopPropagation(e);
+
+            // 現在ハイライトされている地物がある場合、スタイルをリセット
+            // ただし、同じ地物をクリックした場合はリセットしない
+            const n03Value = e.target.feature.properties[n03Column];
+            const isAlreadyHighlighted = highlightedLayers.length > 0 && highlightedLayers[0].feature.properties[n03Column] === n03Value;
+            
+            if (!isAlreadyHighlighted) {
+                resetAllHighlightsAndPanel();
+            }
+
+            var properties = e.target.feature.properties;
+            if (properties) {
+                if (!isAlreadyHighlighted) {
+                    if (n03GroupLayers.has(n03Value)) {
+                        highlightedLayers = n03GroupLayers.get(n03Value);
+                        highlightedLayers.forEach(layer => {
+                            layer.setStyle(highlightStyle);
+                            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                                layer.bringToFront();
+                            }
+                        });
+                    }
+                }
+                
+                const municipalityName = properties[municipalityNameColumn] || '自治体名なし';
+                const ratio = properties[ratioColumn] !== null ? parseFloat(properties[ratioColumn]).toFixed(2) + '%' : 'データなし';
+                const foreignerPop = properties[foreignerPopulationColumn] !== null ? parseInt(properties[foreignerPopulationColumn]).toLocaleString() : 'データなし';
+                const totalPop = properties[totalPopulationColumn] !== null ? parseInt(properties[totalPopulationColumn]).toLocaleString() : 'データなし';
+
+                let infoContent = `<h2>${municipalityName}</h2>`;
+                infoContent += `<p class="highlight"><strong>在留外国人比率</strong>: ${ratio}</p>`;
+                infoContent += `<p><strong>在留外国人人口</strong>: ${foreignerPop} 人</p>`;
+                infoContent += `<p><strong>総人口</strong>: ${totalPop} 人</p>`;
+
+                if (window.innerWidth <= 768) {
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(infoContent)
+                        .openOn(map);
+                } else {
+                    document.getElementById('info-panel').innerHTML = infoContent;
+                }
+            }
+        }
+        
+        // 各フィーチャにクリックイベントを追加
+        function onEachFeature(feature, layer) {
+            const n03Value = feature.properties[n03Column];
+            if (n03Value) {
+                if (!n03GroupLayers.has(n03Value)) {
+                    n03GroupLayers.set(n03Value, []);
+                }
+                n03GroupLayers.get(n03Value).push(layer);
+            }
+            
+            layer.on({
+                click: clickFeature
+            });
+        }
+
+        fetch(geojsonDataPath)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('GeoJSONファイルの読み込みに失敗しました: ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                geojsonLayer = L.geoJSON(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                var bounds = geojsonLayer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds);
+                }
+            })
+            .catch(error => {
+                console.error('GeoJSONファイルの読み込みまたは処理中にエラーが発生しました:', error);
+            });
+            
+        // 地図上の空いている場所をクリックしたときにハイライトをリセット
+        map.on('click', resetAllHighlightsAndPanel);
+
+        // --- 説明モーダルのJavaScript制御と凡例の生成 ---
+        const infoButton = document.getElementById('infoButton');
+        const explanationOverlay = document.getElementById('explanationOverlay');
+        const closeExplanationButton = document.getElementById('closeExplanationButton');
+
+        infoButton.addEventListener('click', () => {
+            explanationOverlay.classList.add('active');
+            generateLegend('explanation-legend-list'); // ここで凡例を再生成
+        });
+
+        closeExplanationButton.addEventListener('click', () => {
+            explanationOverlay.classList.remove('active');
+        });
+
+        // オーバーレイの背景をクリックで閉じる
+        explanationOverlay.addEventListener('click', (e) => {
+            if (e.target === explanationOverlay) {
+                explanationOverlay.classList.remove('active');
+            }
+        });
+
+        // ESCキーで閉じる
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && explanationOverlay.classList.contains('active')) {
+                explanationOverlay.classList.remove('active');
+            }
+        });
+        
+        // 凡例を動的に生成する
+        function generateLegend(containerId) {
+            const grades = [0.00, 0.50, 1.00, 1.50, 2.00, 2.50, 3.00, 3.50, 4.00, 4.50, 5.00, 6.00, 7.00, 8.00, 9.00, 10.00, 12.50, 15.00, 17.50, 20.00, 25.00, 30.00, 50.00];
+            const simplifiedGrades = [30, 20, 10, 5, 0];
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            const gradientColors = grades.map((grade, i) => `${getColor(grade)} ${(i / (grades.length - 1)) * 100}%`).join(', ');
+            
+            let valuesHtml = '';
+            // シンプルな値を等間隔に配置
+            const totalSteps = simplifiedGrades.length - 1;
+            simplifiedGrades.forEach((grade, index) => {
+                const position = (index / totalSteps) * 100;
+                valuesHtml += `<span class="legend-value" style="top: ${position}%;">${grade}%</span>`;
+            });
+
+            container.innerHTML = `
+                <div class="legend-gradient-bar" style="background: linear-gradient(to top, ${gradientColors});"></div>
+                <div class="legend-gradient-values">
+                    ${valuesHtml}
+                </div>
+            `;
+        }
+        
+        // ページ読み込み時に凡例を生成し、説明パネルを開く
+        window.onload = function() {
+            generateLegend('explanation-legend-list');
+            const explanationOverlay = document.getElementById('explanationOverlay');
+            explanationOverlay.classList.add('active');
+        };
+    </script>
+</body>
+</html>
